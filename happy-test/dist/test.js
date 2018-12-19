@@ -24,18 +24,18 @@ const logStringAndNumber = [
     opcodes_1.Base.Log,
     opcodes_1.Base.Halt
 ];
-// const domManipulation = [
-//   Browser.NewBrowser,
-//   Browser.NewPage,
-//   Base.Push,
-//   "http://www.example.com",
-//   Browser.VisitUrl,
-//   Browser.Screenshot,
-//   Browser.ClosePage,
-//   Browser.CloseBrowser,
-//   Base.Halt
-// ];
-const feat = jherkin_1.feature("browser works", jherkin_1.scenario("base case", jherkin_1.given(() => [opcodes_1.Browser.NewBrowser, opcodes_1.Browser.NewPage]), jherkin_1.when(([url]) => [opcodes_1.Base.Push, url, opcodes_1.Browser.VisitUrl], "https://www.example.com"), jherkin_1.then(() => [opcodes_1.Browser.Screenshot]), jherkin_1.and(() => [opcodes_1.Browser.ClosePage, opcodes_1.Browser.CloseBrowser])), jherkin_1.scenario("operating on the DOM"));
+const feat = jherkin_1.feature("browser works", jherkin_1.scenario("base case", jherkin_1.given((_, offset) => {
+    const setup = [opcodes_1.Browser.NewBrowser, opcodes_1.Browser.NewPage];
+    const teardown = () => [opcodes_1.Browser.ClosePage, opcodes_1.Browser.CloseBrowser];
+    const [teardownDeclaration, fnIndex] = jherkin_1.declareFns(offset, [teardown]);
+    const teardownAddr = fnIndex.get(teardown);
+    return [...teardownDeclaration, opcodes_1.Base.Push, teardownAddr, ...setup];
+}), jherkin_1.when(([url]) => [opcodes_1.Base.Push, url, opcodes_1.Browser.VisitUrl], "https://www.example.com"), jherkin_1.then(() => [opcodes_1.Browser.Screenshot])), jherkin_1.scenario("operating on the DOM", jherkin_1.given((_, offset) => {
+    const teardown = () => [];
+    const [teardownDeclaration, fnIndex] = jherkin_1.declareFns(offset, [teardown]);
+    const teardownAddr = fnIndex.get(teardown);
+    return [...teardownDeclaration, opcodes_1.Base.Push, teardownAddr];
+})));
 function runTests() {
     return __awaiter(this, void 0, void 0, function* () {
         vm.load(logStringAndNumber);

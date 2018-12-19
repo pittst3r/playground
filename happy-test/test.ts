@@ -1,15 +1,6 @@
 import { VM } from "./vm";
 import { base, Base, browser, Browser } from "./opcodes";
-import {
-  feature,
-  scenario,
-  given,
-  when,
-  then,
-  and,
-  declareFns,
-  Func
-} from "./jherkin";
+import { feature, scenario, given, when, then, declareFns } from "./jherkin";
 
 const vm = new VM(c => {
   base(c);
@@ -31,24 +22,27 @@ const feat = feature(
   scenario(
     "base case",
     given((_, offset) => {
+      const setup = [Browser.NewBrowser, Browser.NewPage];
       const teardown = () => [Browser.ClosePage, Browser.CloseBrowser];
-      const [teardownDeclaration, fnIndex] = declareFns(offset + 2, [teardown]);
-      return [
-        Browser.NewBrowser,
-        Browser.NewPage,
-        ...teardownDeclaration,
-        Base.Push,
-        fnIndex.get(teardown)
-      ];
+      const [teardownDeclaration, fnIndex] = declareFns(offset, [teardown]);
+      const teardownAddr = fnIndex.get(teardown);
+      return [...teardownDeclaration, Base.Push, teardownAddr, ...setup];
     }),
     when(
       ([url]) => [Base.Push, url, Browser.VisitUrl],
       "https://www.example.com"
     ),
-    then(() => [Browser.Screenshot]),
-    and(() => [Browser.ClosePage, Browser.CloseBrowser])
+    then(() => [Browser.Screenshot])
   ),
-  scenario("operating on the DOM")
+  scenario(
+    "operating on the DOM",
+    given((_, offset) => {
+      const teardown = () => [];
+      const [teardownDeclaration, fnIndex] = declareFns(offset, [teardown]);
+      const teardownAddr = fnIndex.get(teardown);
+      return [...teardownDeclaration, Base.Push, teardownAddr];
+    })
+  )
 );
 
 async function runTests() {

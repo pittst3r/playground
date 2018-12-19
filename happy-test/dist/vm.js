@@ -73,10 +73,14 @@ class VM {
         this.stack = new Stack();
         this.pc = new ProgramCounter();
         this.ops = new Map();
+        this.registers = new Map();
         this.program = new Program(this.pc, []);
         config({
-            addOp: (op, builder) => {
-                this.ops.set(op, builder);
+            addOp: (opcode, operation) => {
+                this.ops.set(opcode, operation);
+            },
+            addRegister: name => {
+                this.registers.set(name, null);
             }
         });
     }
@@ -94,7 +98,12 @@ class VM {
             if (op === undefined) {
                 throw new Error(`Could not find op with pc @ ${this.pc.peek()}`);
             }
-            const vm = { pc: this.pc, stack: this.stack, program: this.program };
+            const vm = {
+                pc: this.pc,
+                stack: this.stack,
+                registers: this.registers,
+                program: this.program
+            };
             yield op(vm);
             return { done: this.pc.peek() === -1, value: undefined };
         });

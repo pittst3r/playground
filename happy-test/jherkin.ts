@@ -5,15 +5,15 @@ export interface IStep {}
 
 export type StepDef = () => void;
 
-export type Func = (offset: number) => InstructionList;
+export type Builder = (offset: number) => InstructionList;
 
 export function feature(
   description: string,
-  ...scenarios: Array<Func>
+  ...scenarios: Array<Builder>
 ): InstructionList {
   const [fnDeclarations, fnIndex] = declareFns(3, scenarios);
   const calls: InstructionList = scenarios.reduce(
-    (memo, scenario) => [...memo, Base.Call, fnIndex.get(scenario)],
+    (memo, scenario) => [...memo, Base.Push, fnIndex.get(scenario), Base.Call],
     [] as InstructionList
   );
 
@@ -27,33 +27,45 @@ export function feature(
   ];
 }
 
-export function scenario(description: string, ...steps: Array<Func>): Func {
+export function scenario(
+  description: string,
+  ...steps: Array<Builder>
+): Builder {
   return offset => {
     const [fnDeclarations, fnIndex] = declareFns(offset + 3, steps);
     const calls: InstructionList = steps.reduce(
-      (memo, step) => [...memo, Base.Call, fnIndex.get(step)],
+      (memo, step) => [...memo, Base.Push, fnIndex.get(step), Base.Call],
       [] as InstructionList
     );
+    const teardownCall = Base.Call;
 
-    return [Base.Push, description, Base.Log, ...fnDeclarations, ...calls];
+    return [
+      Base.Push,
+      description,
+      Base.Log,
+      ...fnDeclarations,
+      ...calls,
+      teardownCall
+    ];
   };
 }
 
 export function declareFns(
   offset: number,
-  fns: Array<Func>
-): [InstructionList, WeakMap<Func, number>] {
-  const fnIndex = new WeakMap<Func, number>();
+  fns: Array<Builder>
+): [InstructionList, WeakMap<Builder, number>] {
+  const fnIndex = new WeakMap<Builder, number>();
   let instructions: InstructionList = [];
 
   fns.forEach(fn => {
-    const fnAddr = offset + instructions.length + 2;
+    const fnAddr = offset + instructions.length + 3;
     const offsetFn = fn(fnAddr);
     const afterFnAddr = fnAddr + offsetFn.length + 1;
 
     instructions = instructions.concat([
-      Base.Jump,
+      Base.Push,
       afterFnAddr,
+      Base.Jump,
       ...offsetFn,
       Base.Return
     ]);
@@ -66,7 +78,7 @@ export function declareFns(
 export function run(
   stepDef: (args: any[], offset: number) => InstructionList,
   ...args: any[]
-): Func {
+): Builder {
   return offset => stepDef(args, offset);
 }
 
@@ -75,13 +87,3 @@ export const when = run;
 export const then = run;
 export const and = run;
 export const should = run;
-
-// export function macro(sequences) {
-//   return (...args) => {
-//     return test => {
-//       sequences(...args).forEach(sequence => {
-//         sequence(test);
-//       });
-//     };
-//   };
-// }

@@ -47,10 +47,9 @@ function base(c) {
             pc.advance();
         });
     });
-    c.addOp(Base.Call, function ({ pc, program }) {
+    c.addOp(Base.Call, function ({ pc, stack }) {
         return __awaiter(this, void 0, void 0, function* () {
-            pc.advance();
-            pc.push(program.next().value);
+            pc.push(stack.pop());
         });
     });
     c.addOp(Base.Return, function ({ pc }) {
@@ -59,10 +58,9 @@ function base(c) {
             pc.advance();
         });
     });
-    c.addOp(Base.Jump, function ({ pc, program }) {
+    c.addOp(Base.Jump, function ({ pc, stack }) {
         return __awaiter(this, void 0, void 0, function* () {
-            pc.advance();
-            pc.jump(program.next().value);
+            pc.jump(stack.pop());
         });
     });
     c.addOp(Base.Log, function ({ pc, stack }) {
@@ -74,46 +72,49 @@ function base(c) {
 }
 exports.base = base;
 function browser(c) {
-    c.addOp(Browser.NewBrowser, function ({ pc, stack }) {
+    c.addRegister("browser");
+    c.addRegister("page");
+    c.addOp(Browser.NewBrowser, function ({ pc, registers }) {
         return __awaiter(this, void 0, void 0, function* () {
             const browser = yield puppeteer.launch();
-            stack.push(browser);
+            registers.set("browser", browser);
             pc.advance();
         });
     });
-    c.addOp(Browser.CloseBrowser, function ({ pc, stack }) {
+    c.addOp(Browser.CloseBrowser, function ({ pc, registers }) {
         return __awaiter(this, void 0, void 0, function* () {
-            const browser = stack.pop();
+            const browser = registers.get("browser");
             yield browser.close();
+            registers.set("browser", null);
             pc.advance();
         });
     });
-    c.addOp(Browser.NewPage, function ({ pc, stack }) {
+    c.addOp(Browser.NewPage, function ({ pc, registers }) {
         return __awaiter(this, void 0, void 0, function* () {
-            const browser = stack.peek();
+            const browser = registers.get("browser");
             const page = yield browser.newPage();
-            stack.push(page);
+            registers.set("page", page);
             pc.advance();
         });
     });
-    c.addOp(Browser.ClosePage, function ({ pc, stack }) {
+    c.addOp(Browser.ClosePage, function ({ pc, registers }) {
         return __awaiter(this, void 0, void 0, function* () {
-            const page = stack.pop();
+            const page = registers.get("page");
             yield page.close();
             pc.advance();
         });
     });
-    c.addOp(Browser.VisitUrl, function ({ pc, stack }) {
+    c.addOp(Browser.VisitUrl, function ({ pc, stack, registers }) {
         return __awaiter(this, void 0, void 0, function* () {
             const url = stack.pop();
-            const page = stack.peek();
+            const page = registers.get("page");
             yield page.goto(url);
             pc.advance();
         });
     });
-    c.addOp(Browser.Screenshot, function ({ pc, stack }) {
+    c.addOp(Browser.Screenshot, function ({ pc, registers }) {
         return __awaiter(this, void 0, void 0, function* () {
-            const page = stack.peek();
+            const page = registers.get("page");
             yield page.screenshot({ path: "screenshot.png" });
             pc.advance();
         });
