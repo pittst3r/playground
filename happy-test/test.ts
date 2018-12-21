@@ -1,53 +1,69 @@
-import { VM } from "./vm";
-import { base, Base, browser, Browser } from "./opcodes";
-import { feature, scenario, given, when, then, declareFns } from "./jherkin";
+import { VM, Builtin } from "./vm";
+import { browser, Browser, assert, Assert } from "./opcodes";
+import { feature, scenario, when, then, should, StepDef, and } from "./jherkin";
 
-const vm = new VM(c => {
-  base(c);
-  browser(c);
+const vm = new VM(conf => {
+  browser(conf);
+  assert(conf);
 });
 
-const logStringAndNumber = [
-  Base.Push,
-  1234567890,
-  Base.Push,
-  "henlo world 👯",
-  Base.Log,
-  Base.Log,
-  Base.Halt
-];
+const visit: StepDef<[string]> = function([url]) {
+  return [Builtin.Push, url, Browser.VisitUrl];
+};
+
+const element: StepDef<[string]> = function([selector]) {
+  return [Builtin.Push, selector, Browser.Select];
+};
+
+const clickLink: StepDef<[string]> = function([text]) {
+  return [
+    Builtin.Push,
+    text,
+    Builtin.Push,
+    "a",
+    Browser.FindText,
+    Browser.ClickLink
+  ];
+};
+
+const haveText: StepDef<[string]> = function([expected], offset) {
+  const test = [Browser.TextContent, Builtin.Push, expected, Assert.Equal];
+  const resultHandler = [
+    Builtin.Push,
+    offset + test.length + 8,
+    Builtin.JumpIf,
+    Builtin.Push,
+    "    FAIL: ",
+    Builtin.Push,
+    offset + test.length + 10,
+    Builtin.Jump,
+    Builtin.Push,
+    "    PASS: ",
+    Builtin.Concat,
+    Builtin.Log
+  ];
+
+  return [...test, ...resultHandler];
+};
 
 const feat = feature(
   "browser works",
   scenario(
     "base case",
-    given((_, offset) => {
-      const setup = [Browser.NewBrowser, Browser.NewPage];
-      const teardown = () => [Browser.ClosePage, Browser.CloseBrowser];
-      const [teardownDeclaration, fnIndex] = declareFns(offset, [teardown]);
-      const teardownAddr = fnIndex.get(teardown);
-      return [...teardownDeclaration, Base.Push, teardownAddr, ...setup];
-    }),
-    when(
-      ([url]) => [Base.Push, url, Browser.VisitUrl],
-      "https://www.example.com"
-    ),
-    then(() => [Browser.Screenshot])
+    when(visit, "https://www.example.com"),
+    then(element, "h1"),
+    should(haveText, "Example Domain")
   ),
   scenario(
-    "operating on the DOM",
-    given((_, offset) => {
-      const teardown = () => [];
-      const [teardownDeclaration, fnIndex] = declareFns(offset, [teardown]);
-      const teardownAddr = fnIndex.get(teardown);
-      return [...teardownDeclaration, Base.Push, teardownAddr];
-    })
+    "more complex",
+    when(visit, "https://www.example.com"),
+    and(clickLink, "More information..."),
+    then(element, "h1"),
+    should(haveText, "IANA-managed Reserved Domains")
   )
 );
 
 async function runTests() {
-  vm.load(logStringAndNumber);
-  await vm.run();
   vm.load(feat);
   await vm.run();
 }

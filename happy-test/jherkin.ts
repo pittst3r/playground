@@ -1,9 +1,12 @@
-import { InstructionList } from "./vm";
-import { Base } from "./opcodes";
+import { InstructionList, Builtin } from "./vm";
+import { Browser } from "./opcodes";
 
 export interface IStep {}
 
-export type StepDef = () => void;
+export type StepDef<Args extends any[]> = (
+  args: Args,
+  offset: number
+) => InstructionList;
 
 export type Builder = (offset: number) => InstructionList;
 
@@ -11,19 +14,25 @@ export function feature(
   description: string,
   ...scenarios: Array<Builder>
 ): InstructionList {
-  const [fnDeclarations, fnIndex] = declareFns(3, scenarios);
+  const offset = 3;
+  const [fnDeclarations, fnIndex] = declare(offset, scenarios);
   const calls: InstructionList = scenarios.reduce(
-    (memo, scenario) => [...memo, Base.Push, fnIndex.get(scenario), Base.Call],
+    (memo, scenario) => [
+      ...memo,
+      Builtin.Push,
+      fnIndex.get(scenario),
+      Builtin.Call
+    ],
     [] as InstructionList
   );
 
   return [
-    Base.Push,
-    description,
-    Base.Log,
+    Builtin.Push,
+    `Feature: ${description}`,
+    Builtin.Log,
     ...fnDeclarations,
     ...calls,
-    Base.Halt
+    Builtin.Halt
   ];
 }
 
@@ -32,25 +41,42 @@ export function scenario(
   ...steps: Array<Builder>
 ): Builder {
   return offset => {
-    const [fnDeclarations, fnIndex] = declareFns(offset + 3, steps);
-    const calls: InstructionList = steps.reduce(
-      (memo, step) => [...memo, Base.Push, fnIndex.get(step), Base.Call],
+    const setup = [Browser.NewBrowser, Browser.NewPage];
+    const teardown = () => [Browser.ClosePage, Browser.CloseBrowser];
+    const [teardownDeclaration, teardownIndex] = declare(offset, [teardown]);
+    const [stepDeclarations, stepIndex] = declare(
+      offset + teardownDeclaration.length,
+      steps
+    );
+    const stepCalls: InstructionList = steps.reduce(
+      (memo, step) => [
+        ...memo,
+        Builtin.Push,
+        stepIndex.get(step),
+        Builtin.Call
+      ],
       [] as InstructionList
     );
-    const teardownCall = Base.Call;
+    const teardownCall = [
+      Builtin.Push,
+      teardownIndex.get(teardown),
+      Builtin.Call
+    ];
 
     return [
-      Base.Push,
-      description,
-      Base.Log,
-      ...fnDeclarations,
-      ...calls,
-      teardownCall
+      ...teardownDeclaration,
+      ...stepDeclarations,
+      Builtin.Push,
+      `  Scenario: ${description}`,
+      Builtin.Log,
+      ...setup,
+      ...stepCalls,
+      ...teardownCall
     ];
   };
 }
 
-export function declareFns(
+export function declare(
   offset: number,
   fns: Array<Builder>
 ): [InstructionList, WeakMap<Builder, number>] {
@@ -63,11 +89,11 @@ export function declareFns(
     const afterFnAddr = fnAddr + offsetFn.length + 1;
 
     instructions = instructions.concat([
-      Base.Push,
+      Builtin.Push,
       afterFnAddr,
-      Base.Jump,
+      Builtin.Jump,
       ...offsetFn,
-      Base.Return
+      Builtin.Return
     ]);
     fnIndex.set(fn, fnAddr);
   });
@@ -75,9 +101,9 @@ export function declareFns(
   return [instructions, fnIndex];
 }
 
-export function run(
-  stepDef: (args: any[], offset: number) => InstructionList,
-  ...args: any[]
+export function run<Args extends any[]>(
+  stepDef: StepDef<Args>,
+  ...args: Args
 ): Builder {
   return offset => stepDef(args, offset);
 }

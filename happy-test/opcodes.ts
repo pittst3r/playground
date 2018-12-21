@@ -1,16 +1,7 @@
 import { IConfig } from "./vm";
 import * as puppeteer from "puppeteer";
 import { Browser as IBrowser, Page } from "puppeteer";
-
-export enum Base {
-  Halt = "HALT",
-  Push = "PUSH",
-  Pop = "POP",
-  Jump = "JUMP",
-  Call = "CALL",
-  Return = "RETURN",
-  Log = "LOG"
-}
+import { join } from "path";
 
 export enum Browser {
   NewBrowser = "NEWBROWSER",
@@ -18,36 +9,11 @@ export enum Browser {
   NewPage = "NEWPAGE",
   ClosePage = "CLOSEPAGE",
   VisitUrl = "VISITURL",
-  Screenshot = "SCREENSHOT"
-}
-
-export function base(c: IConfig) {
-  c.addOp(Base.Halt, async function({ pc }) {
-    pc.halt();
-  });
-  c.addOp(Base.Push, async function({ stack, program, pc }) {
-    pc.advance();
-    stack.push(program.next().value);
-    pc.advance();
-  });
-  c.addOp(Base.Pop, async function({ pc, stack }) {
-    stack.pop();
-    pc.advance();
-  });
-  c.addOp(Base.Call, async function({ pc, stack }) {
-    pc.push(stack.pop());
-  });
-  c.addOp(Base.Return, async function({ pc }) {
-    pc.pop();
-    pc.advance();
-  });
-  c.addOp(Base.Jump, async function({ pc, stack }) {
-    pc.jump(stack.pop());
-  });
-  c.addOp(Base.Log, async function({ pc, stack }) {
-    console.log(stack.pop());
-    pc.advance();
-  });
+  Screenshot = "SCREENSHOT",
+  Select = "SELECT",
+  TextContent = "TEXTCONTENT",
+  FindText = "FINDTEXT",
+  ClickLink = "CLICK"
 }
 
 export function browser(c: IConfig) {
@@ -83,7 +49,55 @@ export function browser(c: IConfig) {
   });
   c.addOp(Browser.Screenshot, async function({ pc, registers }) {
     const page: Page = registers.get("page")!;
-    await page.screenshot({ path: "screenshot.png" });
+    await page.screenshot({ path: join(process.cwd(), "screenshot.png") });
+    pc.advance();
+  });
+  c.addOp(Browser.Select, async function({ pc, registers, stack }) {
+    const page: Page = registers.get("page")!;
+    const selector = stack.pop();
+    stack.push(await page.$(selector));
+    pc.advance();
+  });
+  c.addOp(Browser.TextContent, async function({ pc, registers, stack }) {
+    const page: Page = registers.get("page")!;
+    const handle = stack.pop();
+    const textHandle = await page.evaluateHandle(
+      node => node.textContent,
+      handle
+    );
+    const text = await textHandle.jsonValue();
+    stack.push(text);
+    pc.advance();
+  });
+  c.addOp(Browser.FindText, async function({ pc, registers, stack }) {
+    const page: Page = registers.get("page")!;
+    const selector = stack.pop();
+    const text = stack.pop();
+    // TODO: This selector is wrong
+    const elements = await page.$x(`//${selector}[text() = "${text}"]`);
+    stack.push(elements[0]);
+    pc.advance();
+  });
+  c.addOp(Browser.ClickLink, async function({ pc, stack, registers }) {
+    const page: Page = registers.get("page")!;
+    const handle = stack.pop();
+    await Promise.all([page.waitForNavigation(), handle.click()]);
+    pc.advance();
+  });
+}
+
+export enum Assert {
+  Equal = "EQUAL"
+}
+
+export function assert(c: IConfig) {
+  c.addOp(Assert.Equal, async function({ pc, stack }) {
+    const expected = stack.pop();
+    const actual = stack.pop();
+
+    stack.push(`Expected "${actual}" to equal "${expected}"`);
+    stack.push(expected === actual);
+
     pc.advance();
   });
 }

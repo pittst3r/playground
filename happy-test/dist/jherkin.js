@@ -1,36 +1,57 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+const vm_1 = require("./vm");
 const opcodes_1 = require("./opcodes");
 function feature(description, ...scenarios) {
-    const [fnDeclarations, fnIndex] = declareFns(3, scenarios);
-    const calls = scenarios.reduce((memo, scenario) => [...memo, opcodes_1.Base.Push, fnIndex.get(scenario), opcodes_1.Base.Call], []);
+    const offset = 3;
+    const [fnDeclarations, fnIndex] = declare(offset, scenarios);
+    const calls = scenarios.reduce((memo, scenario) => [
+        ...memo,
+        vm_1.Builtin.Push,
+        fnIndex.get(scenario),
+        vm_1.Builtin.Call
+    ], []);
     return [
-        opcodes_1.Base.Push,
-        description,
-        opcodes_1.Base.Log,
+        vm_1.Builtin.Push,
+        `Feature: ${description}`,
+        vm_1.Builtin.Log,
         ...fnDeclarations,
         ...calls,
-        opcodes_1.Base.Halt
+        vm_1.Builtin.Halt
     ];
 }
 exports.feature = feature;
 function scenario(description, ...steps) {
     return offset => {
-        const [fnDeclarations, fnIndex] = declareFns(offset + 3, steps);
-        const calls = steps.reduce((memo, step) => [...memo, opcodes_1.Base.Push, fnIndex.get(step), opcodes_1.Base.Call], []);
-        const teardownCall = opcodes_1.Base.Call;
+        const setup = [opcodes_1.Browser.NewBrowser, opcodes_1.Browser.NewPage];
+        const teardown = () => [opcodes_1.Browser.ClosePage, opcodes_1.Browser.CloseBrowser];
+        const [teardownDeclaration, teardownIndex] = declare(offset, [teardown]);
+        const [stepDeclarations, stepIndex] = declare(offset + teardownDeclaration.length, steps);
+        const stepCalls = steps.reduce((memo, step) => [
+            ...memo,
+            vm_1.Builtin.Push,
+            stepIndex.get(step),
+            vm_1.Builtin.Call
+        ], []);
+        const teardownCall = [
+            vm_1.Builtin.Push,
+            teardownIndex.get(teardown),
+            vm_1.Builtin.Call
+        ];
         return [
-            opcodes_1.Base.Push,
-            description,
-            opcodes_1.Base.Log,
-            ...fnDeclarations,
-            ...calls,
-            teardownCall
+            ...teardownDeclaration,
+            ...stepDeclarations,
+            vm_1.Builtin.Push,
+            `  Scenario: ${description}`,
+            vm_1.Builtin.Log,
+            ...setup,
+            ...stepCalls,
+            ...teardownCall
         ];
     };
 }
 exports.scenario = scenario;
-function declareFns(offset, fns) {
+function declare(offset, fns) {
     const fnIndex = new WeakMap();
     let instructions = [];
     fns.forEach(fn => {
@@ -38,17 +59,17 @@ function declareFns(offset, fns) {
         const offsetFn = fn(fnAddr);
         const afterFnAddr = fnAddr + offsetFn.length + 1;
         instructions = instructions.concat([
-            opcodes_1.Base.Push,
+            vm_1.Builtin.Push,
             afterFnAddr,
-            opcodes_1.Base.Jump,
+            vm_1.Builtin.Jump,
             ...offsetFn,
-            opcodes_1.Base.Return
+            vm_1.Builtin.Return
         ]);
         fnIndex.set(fn, fnAddr);
     });
     return [instructions, fnIndex];
 }
-exports.declareFns = declareFns;
+exports.declare = declare;
 function run(stepDef, ...args) {
     return offset => stepDef(args, offset);
 }
