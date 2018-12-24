@@ -1,6 +1,6 @@
 import { IConfig } from "./vm";
 import * as puppeteer from "puppeteer";
-import { Browser as IBrowser, Page } from "puppeteer";
+import { Browser as IBrowser, Page, ElementHandle } from "puppeteer";
 import { join } from "path";
 
 export enum Browser {
@@ -25,62 +25,58 @@ export function browser(c: IConfig) {
     pc.advance();
   });
   c.addOp(Browser.CloseBrowser, async function({ pc, registers }) {
-    const browser: IBrowser = registers.get("browser")!;
+    const browser = registers.get("browser") as IBrowser;
     await browser.close();
     registers.set("browser", null);
     pc.advance();
   });
   c.addOp(Browser.NewPage, async function({ pc, registers }) {
-    const browser: IBrowser = registers.get("browser")!;
+    const browser = registers.get("browser") as IBrowser;
     const page = await browser.newPage();
     registers.set("page", page);
     pc.advance();
   });
   c.addOp(Browser.ClosePage, async function({ pc, registers }) {
-    const page: Page = registers.get("page")!;
+    const page = registers.get("page") as Page;
     await page.close();
     pc.advance();
   });
   c.addOp(Browser.VisitUrl, async function({ pc, stack, registers }) {
-    const url = stack.pop()!;
-    const page: Page = registers.get("page")!;
+    const url = stack.pop() as string;
+    const page = registers.get("page") as Page;
     await page.goto(url);
     pc.advance();
   });
   c.addOp(Browser.Screenshot, async function({ pc, registers }) {
-    const page: Page = registers.get("page")!;
+    const page = registers.get("page") as Page;
     await page.screenshot({ path: join(process.cwd(), "screenshot.png") });
     pc.advance();
   });
   c.addOp(Browser.Select, async function({ pc, registers, stack }) {
-    const page: Page = registers.get("page")!;
-    const selector = stack.pop();
+    const page = registers.get("page") as Page;
+    const selector = stack.pop() as string;
     stack.push(await page.$(selector));
     pc.advance();
   });
   c.addOp(Browser.TextContent, async function({ pc, registers, stack }) {
-    const page: Page = registers.get("page")!;
+    const page = registers.get("page") as Page;
     const handle = stack.pop();
-    const textHandle = await page.evaluateHandle(
-      node => node.textContent,
-      handle
-    );
-    const text = await textHandle.jsonValue();
+    const text = await page.evaluate(node => node.textContent, handle);
     stack.push(text);
     pc.advance();
   });
   c.addOp(Browser.FindText, async function({ pc, registers, stack }) {
-    const page: Page = registers.get("page")!;
+    const page = registers.get("page") as Page;
     const selector = stack.pop();
     const text = stack.pop();
-    // TODO: This selector is wrong
+    // TODO: This xpath selector is wrong
     const elements = await page.$x(`//${selector}[text() = "${text}"]`);
     stack.push(elements[0]);
     pc.advance();
   });
   c.addOp(Browser.ClickLink, async function({ pc, stack, registers }) {
-    const page: Page = registers.get("page")!;
-    const handle = stack.pop();
+    const page = registers.get("page") as Page;
+    const handle = stack.pop() as ElementHandle;
     await Promise.all([page.waitForNavigation(), handle.click()]);
     pc.advance();
   });

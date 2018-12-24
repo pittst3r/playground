@@ -17,12 +17,7 @@ export function feature(
   const offset = 3;
   const [fnDeclarations, fnIndex] = declare(offset, scenarios);
   const calls: InstructionList = scenarios.reduce(
-    (memo, scenario) => [
-      ...memo,
-      Builtin.Push,
-      fnIndex.get(scenario),
-      Builtin.Call
-    ],
+    (memo, scenario) => [...memo, Builtin.Call, fnIndex.get(scenario)],
     [] as InstructionList
   );
 
@@ -49,19 +44,10 @@ export function scenario(
       steps
     );
     const stepCalls: InstructionList = steps.reduce(
-      (memo, step) => [
-        ...memo,
-        Builtin.Push,
-        stepIndex.get(step),
-        Builtin.Call
-      ],
+      (memo, step) => [...memo, Builtin.Call, stepIndex.get(step)],
       [] as InstructionList
     );
-    const teardownCall = [
-      Builtin.Push,
-      teardownIndex.get(teardown),
-      Builtin.Call
-    ];
+    const teardownCall = [Builtin.Call, teardownIndex.get(teardown)];
 
     return [
       ...teardownDeclaration,
@@ -84,14 +70,13 @@ export function declare(
   let instructions: InstructionList = [];
 
   fns.forEach(fn => {
-    const fnAddr = offset + instructions.length + 3;
+    const fnAddr = offset + instructions.length + 2;
     const offsetFn = fn(fnAddr);
     const afterFnAddr = fnAddr + offsetFn.length + 1;
 
     instructions = instructions.concat([
-      Builtin.Push,
-      afterFnAddr,
       Builtin.Jump,
+      afterFnAddr,
       ...offsetFn,
       Builtin.Return
     ]);

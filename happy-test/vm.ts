@@ -1,6 +1,6 @@
-export type Opaque = any;
+export type Opaque = unknown;
 
-export type InstructionList = Opaque[];
+export type InstructionList = Array<Opaque>;
 
 export type Opcode = number;
 
@@ -16,7 +16,6 @@ export interface IBuiltinOpBuilder {
   stack: Stack<Opaque>;
   program: Program;
   pc: ProgramCounter;
-  fp: FramePointer;
   registers: Map<string, Opaque>;
 }
 
@@ -47,15 +46,17 @@ export class Stack<T> {
   }
 
   pop() {
-    return this.inner.pop();
+    const value = this.inner.pop();
+
+    if (value === undefined) {
+      throw new Error("Stack is empty");
+    }
+
+    return value;
   }
 
   peek() {
     return this.inner[this.inner.length - 1];
-  }
-
-  truncate(end: number) {
-    this.inner.splice(end);
   }
 }
 
@@ -121,43 +122,54 @@ export function builtins(c: IBuiltinConfig) {
     stack.pop();
     pc.advance();
   });
-  c.addOp(Builtin.Call, async function({ pc, fp, stack }) {
-    pc.push(stack.pop());
-    fp.push(stack.length);
+  c.addOp(Builtin.Call, async function({ pc, program }) {
+    pc.advance();
+    const addr = program.next().value as number;
+    pc.push(addr);
   });
-  c.addOp(Builtin.Return, async function({ pc, fp, stack }) {
-    let returnValue;
-    if (fp.peek() < stack.length) {
-      returnValue = stack.pop();
-    }
-    stack.truncate(fp.pop()!);
-    if (returnValue !== undefined) stack.push(returnValue);
+  c.addOp(Builtin.Return, async function({ pc }) {
     pc.pop();
     pc.advance();
   });
-  c.addOp(Builtin.Concat, async function({ pc, stack }) {
-    const left = stack.pop()!;
-    const right = stack.pop()!;
-
-    stack.push(left.concat(right));
+  c.addOp(Builtin.Jump, async function({ pc, program }) {
     pc.advance();
+    const addr = program.next().value as number;
+    pc.jump(addr);
   });
-  c.addOp(Builtin.Jump, async function({ pc, stack }) {
-    pc.jump(stack.pop());
-  });
-  c.addOp(Builtin.JumpIf, async function({ pc, stack }) {
-    let addr = stack.pop();
+  c.addOp(Builtin.JumpIf, async function({ pc, stack, program }) {
     let predicate = stack.pop();
+    pc.advance();
     if (predicate == true) {
+      const addr = program.next().value as number;
       pc.jump(addr);
-    } else {
+    }
+  });
+  c.addOp(Builtin.Concat, async function({ pc, stack }) {
+    const left = stack.pop();
+    const right = stack.pop();
+
+    if (hasConcat(left) && hasConcat(right)) {
+      stack.push(left.concat(right));
       pc.advance();
+    } else {
+      throw new Error(
+        `Cannot concat "${(left as object).toString()}"` +
+          ` with "${(right as object).toString()}"`
+      );
     }
   });
   c.addOp(Builtin.Log, async function({ pc, stack }) {
     console.log(stack.pop());
     pc.advance();
   });
+}
+
+interface IConcatable {
+  concat(other: IConcatable): IConcatable;
+}
+
+function hasConcat(thing: any): thing is IConcatable {
+  return typeof thing.concat === "function";
 }
 
 export class Program implements IterableIterator<Opaque> {
@@ -180,7 +192,6 @@ export class VM implements AsyncIterableIterator<void> {
   private program: Program;
   private stack = new Stack<Opaque>();
   private pc = new ProgramCounter();
-  private fp = new FramePointer();
   private builtins = new Map<string, BuiltinOp>();
   private ops = new Map<string, Op>();
   private registers = new Map<string, Opaque>();
@@ -215,11 +226,13 @@ export class VM implements AsyncIterableIterator<void> {
   }
 
   async next() {
-    const instruction = this.program.next().value;
+    const instruction = this.program.next().value as string;
     const op = this.builtins.get(instruction) || this.ops.get(instruction)!;
 
     if (op === undefined) {
-      throw new Error(`Could not find op with pc @ ${this.pc.peek()}`);
+      throw new Error(
+        `Could not find op "${instruction}" with pc @ ${this.pc.peek()}`
+      );
     }
 
     const opBuilder = {
@@ -229,7 +242,6 @@ export class VM implements AsyncIterableIterator<void> {
     };
     const builtinOpBuilder = {
       ...opBuilder,
-      fp: this.fp,
       program: this.program
     };
 

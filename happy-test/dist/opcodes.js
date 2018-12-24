@@ -83,8 +83,7 @@ function browser(c) {
         return __awaiter(this, void 0, void 0, function* () {
             const page = registers.get("page");
             const handle = stack.pop();
-            const textHandle = yield page.evaluateHandle(node => node.textContent, handle);
-            const text = yield textHandle.jsonValue();
+            const text = yield page.evaluate(node => node.textContent, handle);
             stack.push(text);
             pc.advance();
         });
@@ -94,7 +93,7 @@ function browser(c) {
             const page = registers.get("page");
             const selector = stack.pop();
             const text = stack.pop();
-            // TODO: This selector is wrong
+            // TODO: This xpath selector is wrong
             const elements = yield page.$x(`//${selector}[text() = "${text}"]`);
             stack.push(elements[0]);
             pc.advance();

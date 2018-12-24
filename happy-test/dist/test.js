@@ -32,23 +32,26 @@ const clickLink = function ([text]) {
     ];
 };
 const haveText = function ([expected], offset) {
-    const test = [opcodes_1.Browser.TextContent, vm_1.Builtin.Push, expected, opcodes_1.Assert.Equal];
-    const resultHandler = [
+    return [
+        opcodes_1.Browser.TextContent,
         vm_1.Builtin.Push,
-        offset + test.length + 8,
-        vm_1.Builtin.JumpIf,
-        vm_1.Builtin.Push,
-        "    FAIL: ",
-        vm_1.Builtin.Push,
-        offset + test.length + 10,
-        vm_1.Builtin.Jump,
-        vm_1.Builtin.Push,
-        "    PASS: ",
+        expected,
+        opcodes_1.Assert.Equal,
+        ...ifElse(offset + 4, [vm_1.Builtin.Push, "    PASS: "], [vm_1.Builtin.Push, "    FAIL: "]),
         vm_1.Builtin.Concat,
         vm_1.Builtin.Log
     ];
-    return [...test, ...resultHandler];
 };
+function ifElse(offset, ifTrue, ifFalse) {
+    return [
+        vm_1.Builtin.JumpIf,
+        offset + ifFalse.length + 4,
+        ...ifFalse,
+        vm_1.Builtin.Jump,
+        offset + ifFalse.length + ifTrue.length + 4,
+        ...ifTrue
+    ];
+}
 const feat = jherkin_1.feature("browser works", jherkin_1.scenario("base case", jherkin_1.when(visit, "https://www.example.com"), jherkin_1.then(element, "h1"), jherkin_1.should(haveText, "Example Domain")), jherkin_1.scenario("more complex", jherkin_1.when(visit, "https://www.example.com"), jherkin_1.and(clickLink, "More information..."), jherkin_1.then(element, "h1"), jherkin_1.should(haveText, "IANA-managed Reserved Domains")));
 function runTests() {
     return __awaiter(this, void 0, void 0, function* () {

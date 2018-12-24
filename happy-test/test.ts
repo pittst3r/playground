@@ -1,4 +1,4 @@
-import { VM, Builtin } from "./vm";
+import { VM, Builtin, InstructionList } from "./vm";
 import { browser, Browser, assert, Assert } from "./opcodes";
 import { feature, scenario, when, then, should, StepDef, and } from "./jherkin";
 
@@ -27,24 +27,35 @@ const clickLink: StepDef<[string]> = function([text]) {
 };
 
 const haveText: StepDef<[string]> = function([expected], offset) {
-  const test = [Browser.TextContent, Builtin.Push, expected, Assert.Equal];
-  const resultHandler = [
+  return [
+    Browser.TextContent,
     Builtin.Push,
-    offset + test.length + 8,
-    Builtin.JumpIf,
-    Builtin.Push,
-    "    FAIL: ",
-    Builtin.Push,
-    offset + test.length + 10,
-    Builtin.Jump,
-    Builtin.Push,
-    "    PASS: ",
+    expected,
+    Assert.Equal,
+    ...ifElse(
+      offset + 4,
+      [Builtin.Push, "    PASS: "],
+      [Builtin.Push, "    FAIL: "]
+    ),
     Builtin.Concat,
     Builtin.Log
   ];
-
-  return [...test, ...resultHandler];
 };
+
+function ifElse(
+  offset: number,
+  ifTrue: InstructionList,
+  ifFalse: InstructionList
+): InstructionList {
+  return [
+    Builtin.JumpIf,
+    offset + ifFalse.length + 4,
+    ...ifFalse,
+    Builtin.Jump,
+    offset + ifFalse.length + ifTrue.length + 4,
+    ...ifTrue
+  ];
+}
 
 const feat = feature(
   "browser works",

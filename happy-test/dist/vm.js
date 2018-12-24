@@ -29,13 +29,14 @@ class Stack {
         this.inner.push(data);
     }
     pop() {
-        return this.inner.pop();
+        const value = this.inner.pop();
+        if (value === undefined) {
+            throw new Error("Stack is empty");
+        }
+        return value;
     }
     peek() {
         return this.inner[this.inner.length - 1];
-    }
-    truncate(end) {
-        this.inner.splice(end);
     }
 }
 exports.Stack = Stack;
@@ -101,47 +102,47 @@ function builtins(c) {
             pc.advance();
         });
     });
-    c.addOp(Builtin.Call, function ({ pc, fp, stack }) {
+    c.addOp(Builtin.Call, function ({ pc, program }) {
         return __awaiter(this, void 0, void 0, function* () {
-            pc.push(stack.pop());
-            fp.push(stack.length);
+            pc.advance();
+            const addr = program.next().value;
+            pc.push(addr);
         });
     });
-    c.addOp(Builtin.Return, function ({ pc, fp, stack }) {
+    c.addOp(Builtin.Return, function ({ pc }) {
         return __awaiter(this, void 0, void 0, function* () {
-            let returnValue;
-            if (fp.peek() < stack.length) {
-                returnValue = stack.pop();
-            }
-            stack.truncate(fp.pop());
-            if (returnValue !== undefined)
-                stack.push(returnValue);
             pc.pop();
             pc.advance();
+        });
+    });
+    c.addOp(Builtin.Jump, function ({ pc, program }) {
+        return __awaiter(this, void 0, void 0, function* () {
+            pc.advance();
+            const addr = program.next().value;
+            pc.jump(addr);
+        });
+    });
+    c.addOp(Builtin.JumpIf, function ({ pc, stack, program }) {
+        return __awaiter(this, void 0, void 0, function* () {
+            let predicate = stack.pop();
+            pc.advance();
+            if (predicate == true) {
+                const addr = program.next().value;
+                pc.jump(addr);
+            }
         });
     });
     c.addOp(Builtin.Concat, function ({ pc, stack }) {
         return __awaiter(this, void 0, void 0, function* () {
             const left = stack.pop();
             const right = stack.pop();
-            stack.push(left.concat(right));
-            pc.advance();
-        });
-    });
-    c.addOp(Builtin.Jump, function ({ pc, stack }) {
-        return __awaiter(this, void 0, void 0, function* () {
-            pc.jump(stack.pop());
-        });
-    });
-    c.addOp(Builtin.JumpIf, function ({ pc, stack }) {
-        return __awaiter(this, void 0, void 0, function* () {
-            let addr = stack.pop();
-            let predicate = stack.pop();
-            if (predicate == true) {
-                pc.jump(addr);
+            if (hasConcat(left) && hasConcat(right)) {
+                stack.push(left.concat(right));
+                pc.advance();
             }
             else {
-                pc.advance();
+                throw new Error(`Cannot concat "${left.toString()}"` +
+                    ` with "${right.toString()}"`);
             }
         });
     });
@@ -153,6 +154,9 @@ function builtins(c) {
     });
 }
 exports.builtins = builtins;
+function hasConcat(thing) {
+    return typeof thing.concat === "function";
+}
 class Program {
     constructor(pc, instructions) {
         this.pc = pc;
@@ -171,7 +175,6 @@ class VM {
     constructor(config) {
         this.stack = new Stack();
         this.pc = new ProgramCounter();
-        this.fp = new FramePointer();
         this.builtins = new Map();
         this.ops = new Map();
         this.registers = new Map();
@@ -205,14 +208,14 @@ class VM {
             const instruction = this.program.next().value;
             const op = this.builtins.get(instruction) || this.ops.get(instruction);
             if (op === undefined) {
-                throw new Error(`Could not find op with pc @ ${this.pc.peek()}`);
+                throw new Error(`Could not find op "${instruction}" with pc @ ${this.pc.peek()}`);
             }
             const opBuilder = {
                 pc: this.pc,
                 stack: this.stack,
                 registers: this.registers
             };
-            const builtinOpBuilder = Object.assign({}, opBuilder, { fp: this.fp, program: this.program });
+            const builtinOpBuilder = Object.assign({}, opBuilder, { program: this.program });
             if (this.isBuiltIn(instruction))
                 yield op(builtinOpBuilder);
             else
@@ -226,11 +229,11 @@ class VM {
     run() {
         return __awaiter(this, void 0, void 0, function* () {
             var e_1, _a;
-            console.log("========instructions========");
-            this.program["instructions"].forEach((ins, i) => {
-                console.log(i, ins);
-            });
             try {
+                // console.log("========instructions========");
+                // this.program["instructions"].forEach((ins, i) => {
+                //   console.log(i, ins);
+                // });
                 for (var _b = __asyncValues(this), _c; _c = yield _b.next(), !_c.done;) {
                     let _ = _c.value;
                 }
