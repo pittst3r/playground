@@ -28,12 +28,14 @@ const clickLink: StepDef<[string]> = function([text]) {
 
 const haveText: StepDef<[string]> = function([expected], offset) {
   return [
+    Builtin.PushVar,
+    0,
     Browser.TextContent,
     Builtin.Push,
     expected,
     Assert.Equal,
     ...ifElse(
-      offset + 4,
+      offset + 6,
       [Builtin.Push, "    PASS: "],
       [Builtin.Push, "    FAIL: "]
     ),

@@ -14,18 +14,21 @@ export function feature(
   description: string,
   ...scenarios: Array<Builder>
 ): InstructionList {
-  const offset = 3;
+  const offset = 0;
   const [fnDeclarations, fnIndex] = declare(offset, scenarios);
   const calls: InstructionList = scenarios.reduce(
-    (memo, scenario) => [...memo, Builtin.Call, fnIndex.get(scenario)],
+    (memo, scenario) => {
+      const scenarioAddr = fnIndex.get(scenario);
+      return [...memo, Builtin.Call, scenarioAddr];
+    },
     [] as InstructionList
   );
 
   return [
+    ...fnDeclarations,
     Builtin.Push,
     `Feature: ${description}`,
     Builtin.Log,
-    ...fnDeclarations,
     ...calls,
     Builtin.Halt
   ];
@@ -44,10 +47,14 @@ export function scenario(
       steps
     );
     const stepCalls: InstructionList = steps.reduce(
-      (memo, step) => [...memo, Builtin.Call, stepIndex.get(step)],
+      (memo, step) => {
+        const stepAddr = stepIndex.get(step);
+        return [...memo, Builtin.Call, stepAddr];
+      },
       [] as InstructionList
     );
-    const teardownCall = [Builtin.Call, teardownIndex.get(teardown)];
+    const teardownAddr = teardownIndex.get(teardown);
+    const teardownCall = [Builtin.Call, teardownAddr];
 
     return [
       ...teardownDeclaration,
@@ -86,15 +93,15 @@ export function declare(
   return [instructions, fnIndex];
 }
 
-export function run<Args extends any[]>(
+export function step<Args extends any[]>(
   stepDef: StepDef<Args>,
   ...args: Args
 ): Builder {
   return offset => stepDef(args, offset);
 }
 
-export const given = run;
-export const when = run;
-export const then = run;
-export const and = run;
-export const should = run;
+export const given = step;
+export const when = step;
+export const then = step;
+export const and = step;
+export const should = step;

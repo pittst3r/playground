@@ -5,34 +5,30 @@ export type InstructionList = Array<Opaque>;
 export type Opcode = number;
 
 export interface IOpBuilder {
-  stack: Stack<Opaque>;
+  frame: Frame;
   pc: ProgramCounter;
+  program: Program;
   registers: Map<string, Opaque>;
+  stack: Stack<Frame>;
 }
 
 export type Op = (opBuilder: IOpBuilder) => Promise<void>;
-
-export interface IBuiltinOpBuilder {
-  stack: Stack<Opaque>;
-  program: Program;
-  pc: ProgramCounter;
-  registers: Map<string, Opaque>;
-}
-
-export type BuiltinOp = (opBuilder: IBuiltinOpBuilder) => Promise<void>;
 
 export interface IConfig {
   addOp: (opcode: string, operation: Op) => void;
   addRegister: (name: string) => void;
 }
 
-export interface IBuiltinConfig {
-  addOp: (opcode: string, operation: BuiltinOp) => void;
-  addRegister: (name: string) => void;
-}
-
-export class Stack<T> {
+export class Stack<T> implements Iterable<T> {
   protected inner: T[] = [];
+
+  constructor(initialValues: Iterable<T> = []) {
+    for (const value of initialValues) this.inner.push(value);
+  }
+
+  [Symbol.iterator]() {
+    return this.inner[Symbol.iterator]();
+  }
 
   get length() {
     return this.inner.length;
@@ -106,26 +102,30 @@ export enum Builtin {
   Call = "CALL",
   Return = "RETURN",
   Concat = "CONCAT",
+  PushVar = "PUSHVAR",
   Log = "LOG"
 }
 
-export function builtins(c: IBuiltinConfig) {
+export function builtins(c: IConfig) {
   c.addOp(Builtin.Halt, async function({ pc }) {
     pc.halt();
   });
-  c.addOp(Builtin.Push, async function({ stack, program, pc }) {
+  c.addOp(Builtin.Push, async function({ frame, program, pc }) {
     pc.advance();
-    stack.push(program.next().value);
-    pc.advance();
-  });
-  c.addOp(Builtin.Pop, async function({ pc, stack }) {
-    stack.pop();
+    frame.stack.push(program.next().value);
     pc.advance();
   });
-  c.addOp(Builtin.Call, async function({ pc, program }) {
+  c.addOp(Builtin.Pop, async function({ pc, frame }) {
+    frame.stack.pop();
+    pc.advance();
+  });
+  c.addOp(Builtin.Call, async function({ frame, pc, program, stack }) {
     pc.advance();
     const addr = program.next().value as number;
     pc.push(addr);
+    const newFrame = new Frame();
+    for (let arg of frame.stack) newFrame.variables.push(arg);
+    stack.push(newFrame);
   });
   c.addOp(Builtin.Return, async function({ pc }) {
     pc.pop();
@@ -136,20 +136,20 @@ export function builtins(c: IBuiltinConfig) {
     const addr = program.next().value as number;
     pc.jump(addr);
   });
-  c.addOp(Builtin.JumpIf, async function({ pc, stack, program }) {
-    let predicate = stack.pop();
+  c.addOp(Builtin.JumpIf, async function({ pc, frame, program }) {
+    let predicate = frame.stack.pop();
     pc.advance();
     if (predicate == true) {
       const addr = program.next().value as number;
       pc.jump(addr);
     }
   });
-  c.addOp(Builtin.Concat, async function({ pc, stack }) {
-    const left = stack.pop();
-    const right = stack.pop();
+  c.addOp(Builtin.Concat, async function({ pc, frame }) {
+    const left = frame.stack.pop();
+    const right = frame.stack.pop();
 
     if (hasConcat(left) && hasConcat(right)) {
-      stack.push(left.concat(right));
+      frame.stack.push(left.concat(right));
       pc.advance();
     } else {
       throw new Error(
@@ -158,8 +158,14 @@ export function builtins(c: IBuiltinConfig) {
       );
     }
   });
-  c.addOp(Builtin.Log, async function({ pc, stack }) {
-    console.log(stack.pop());
+  c.addOp(Builtin.PushVar, async function({ pc, frame, program }) {
+    pc.advance();
+    const varAddr = program.next().value as number;
+    frame.stack.push(frame.variables[varAddr]);
+    pc.advance();
+  });
+  c.addOp(Builtin.Log, async function({ pc, frame }) {
+    console.log(frame.stack.pop());
     pc.advance();
   });
 }
@@ -188,11 +194,15 @@ export class Program implements IterableIterator<Opaque> {
   }
 }
 
+export class Frame {
+  stack = new Stack<Opaque>();
+  variables = new Array<Opaque>();
+}
+
 export class VM implements AsyncIterableIterator<void> {
   private program: Program;
-  private stack = new Stack<Opaque>();
+  private stack = new Stack<Frame>([new Frame()]);
   private pc = new ProgramCounter();
-  private builtins = new Map<string, BuiltinOp>();
   private ops = new Map<string, Op>();
   private registers = new Map<string, Opaque>();
 
@@ -200,7 +210,7 @@ export class VM implements AsyncIterableIterator<void> {
     this.program = new Program(this.pc, []);
     builtins({
       addOp: (opcode, operation) => {
-        this.builtins.set(opcode, operation);
+        this.ops.set(opcode, operation);
       },
       addRegister: name => {
         this.registers.set(name, null);
@@ -225,9 +235,13 @@ export class VM implements AsyncIterableIterator<void> {
     this.program = new Program(this.pc, instructions);
   }
 
+  get currentFrame() {
+    return this.stack.peek();
+  }
+
   async next() {
     const instruction = this.program.next().value as string;
-    const op = this.builtins.get(instruction) || this.ops.get(instruction)!;
+    const op = this.ops.get(instruction)!;
 
     if (op === undefined) {
       throw new Error(
@@ -235,24 +249,15 @@ export class VM implements AsyncIterableIterator<void> {
       );
     }
 
-    const opBuilder = {
+    await op({
+      frame: this.currentFrame,
       pc: this.pc,
-      stack: this.stack,
-      registers: this.registers
-    };
-    const builtinOpBuilder = {
-      ...opBuilder,
-      program: this.program
-    };
-
-    if (this.isBuiltIn(instruction)) await op(builtinOpBuilder);
-    else await (op as Op)(opBuilder);
+      program: this.program,
+      registers: this.registers,
+      stack: this.stack
+    });
 
     return { done: this.pc.peek() === -1, value: undefined };
-  }
-
-  private isBuiltIn(instruction: string): boolean {
-    return this.builtins.has(instruction);
   }
 
   async run(): Promise<void> {
@@ -260,12 +265,13 @@ export class VM implements AsyncIterableIterator<void> {
     // this.program["instructions"].forEach((ins, i) => {
     //   console.log(i, ins);
     // });
+
+    // console.log("========TICK========");
+    // console.log("INSTRUCTION:", this.program.next().value);
     for await (let _ of this) {
       // console.log("========TICK========");
-      // console.log("STACK:", this.stack["inner"].map(i => i.toString()));
-      // console.log("PC:", this.pc["inner"]);
-      // console.log("FP:", this.fp["inner"]);
-      // console.log("CURRENT INSTRUCTION:", this.program.next().value);
+      // console.log("FRAME:", this.currentFrame);
+      // console.log("INSTRUCTION:", this.program.next().value);
     }
   }
 }

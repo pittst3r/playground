@@ -41,7 +41,11 @@ export function browser(c: IConfig) {
     await page.close();
     pc.advance();
   });
-  c.addOp(Browser.VisitUrl, async function({ pc, stack, registers }) {
+  c.addOp(Browser.VisitUrl, async function({
+    pc,
+    frame: { stack },
+    registers
+  }) {
     const url = stack.pop() as string;
     const page = registers.get("page") as Page;
     await page.goto(url);
@@ -52,20 +56,28 @@ export function browser(c: IConfig) {
     await page.screenshot({ path: join(process.cwd(), "screenshot.png") });
     pc.advance();
   });
-  c.addOp(Browser.Select, async function({ pc, registers, stack }) {
+  c.addOp(Browser.Select, async function({ pc, registers, frame: { stack } }) {
     const page = registers.get("page") as Page;
     const selector = stack.pop() as string;
     stack.push(await page.$(selector));
     pc.advance();
   });
-  c.addOp(Browser.TextContent, async function({ pc, registers, stack }) {
+  c.addOp(Browser.TextContent, async function({
+    pc,
+    registers,
+    frame: { stack }
+  }) {
     const page = registers.get("page") as Page;
     const handle = stack.pop();
     const text = await page.evaluate(node => node.textContent, handle);
     stack.push(text);
     pc.advance();
   });
-  c.addOp(Browser.FindText, async function({ pc, registers, stack }) {
+  c.addOp(Browser.FindText, async function({
+    pc,
+    registers,
+    frame: { stack }
+  }) {
     const page = registers.get("page") as Page;
     const selector = stack.pop();
     const text = stack.pop();
@@ -74,7 +86,11 @@ export function browser(c: IConfig) {
     stack.push(elements[0]);
     pc.advance();
   });
-  c.addOp(Browser.ClickLink, async function({ pc, stack, registers }) {
+  c.addOp(Browser.ClickLink, async function({
+    pc,
+    frame: { stack },
+    registers
+  }) {
     const page = registers.get("page") as Page;
     const handle = stack.pop() as ElementHandle;
     await Promise.all([page.waitForNavigation(), handle.click()]);
@@ -87,12 +103,12 @@ export enum Assert {
 }
 
 export function assert(c: IConfig) {
-  c.addOp(Assert.Equal, async function({ pc, stack }) {
+  c.addOp(Assert.Equal, async function({ pc, frame: { stack } }) {
     const expected = stack.pop();
     const actual = stack.pop();
 
     stack.push(`Expected "${actual}" to equal "${expected}"`);
-    stack.push(expected === actual);
+    stack.push(actual === expected);
 
     pc.advance();
   });
