@@ -4,16 +4,16 @@ import { Browser as IBrowser, Page, ElementHandle } from "puppeteer";
 import { join } from "path";
 
 export enum Browser {
-  NewBrowser = "NEWBROWSER",
-  CloseBrowser = "CLOSEBROWSER",
-  NewPage = "NEWPAGE",
-  ClosePage = "CLOSEPAGE",
-  VisitUrl = "VISITURL",
-  Screenshot = "SCREENSHOT",
-  Select = "SELECT",
-  TextContent = "TEXTCONTENT",
-  FindText = "FINDTEXT",
-  ClickLink = "CLICK"
+  NewBrowser = "new-browser",
+  CloseBrowser = "close-browser",
+  NewPage = "new-page",
+  ClosePage = "close-page",
+  VisitUrl = "visit-url",
+  Screenshot = "screenshot",
+  Select = "select",
+  TextContent = "text-content",
+  FindText = "find-text",
+  ClickLink = "click"
 }
 
 export function browser(c: IConfig) {

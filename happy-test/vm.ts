@@ -62,11 +62,11 @@ export class ProgramCounter extends Stack<number> {
     this.push(0);
   }
 
-  halt(): void {
+  halt() {
     this.push(-1);
   }
 
-  advance(distance = 1): void {
+  advance(distance = 1) {
     const last = this.pop();
 
     if (last === undefined) {
@@ -94,16 +94,16 @@ export class FramePointer extends Stack<number> {
 }
 
 export enum Builtin {
-  Halt = "HALT",
-  Push = "PUSH",
-  Pop = "POP",
-  Jump = "JUMP",
-  JumpIf = "JUMPIF",
-  Call = "CALL",
-  Return = "RETURN",
-  Concat = "CONCAT",
-  PushVar = "PUSHVAR",
-  Log = "LOG"
+  Halt = "halt",
+  Push = "push",
+  Pop = "pop",
+  Jump = "jump",
+  JumpIf = "jump-if",
+  Call = "call",
+  Return = "return",
+  Concat = "concat",
+  PushVar = "push-var",
+  Log = "log"
 }
 
 export function builtins(c: IConfig) {
@@ -145,8 +145,8 @@ export function builtins(c: IConfig) {
     }
   });
   c.addOp(Builtin.Concat, async function({ pc, frame }) {
-    const left = frame.stack.pop();
     const right = frame.stack.pop();
+    const left = frame.stack.pop();
 
     if (hasConcat(left) && hasConcat(right)) {
       frame.stack.push(left.concat(right));
@@ -230,7 +230,8 @@ export class VM implements AsyncIterableIterator<void> {
     return this;
   }
 
-  load(instructions: InstructionList): void {
+  load(program: string): void {
+    const instructions: InstructionList = JSON.parse(program).program;
     this.pc = new ProgramCounter();
     this.program = new Program(this.pc, instructions);
   }
@@ -257,7 +258,7 @@ export class VM implements AsyncIterableIterator<void> {
       stack: this.stack
     });
 
-    return { done: this.pc.peek() === -1, value: undefined };
+    return { done: this.program.next().done, value: undefined };
   }
 
   async run(): Promise<void> {

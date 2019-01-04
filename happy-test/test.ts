@@ -77,7 +77,7 @@ const feat = feature(
 );
 
 async function runTests() {
-  vm.load(feat);
+  vm.load(JSON.stringify({ program: feat }));
   await vm.run();
 }
 

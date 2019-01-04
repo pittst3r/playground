@@ -1,0 +1,3 @@
+"hello" ", " concat
+"world!" concat
+log

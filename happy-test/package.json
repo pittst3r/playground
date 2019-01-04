@@ -4,7 +4,7 @@
   "main": "index.js",
   "license": "MIT",
   "scripts": {
-    "start": "yarn build && node ./dist/test.js",
+    "start": "yarn build && node ./dist/compiler-test.js",
     "build": "tsc"
   },
   "dependencies": {

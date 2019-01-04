@@ -1,0 +1,54 @@
+stepdef visit
+  visit-url
+
+stepdef find *
+  select
+
+stepdef fill in *
+  fill-in
+
+stepdef press return
+  13 press-key
+
+stepdef find last *
+  ":last-of-type" concat select
+
+stepdef text should read *
+  inner-text assert-equal
+
+stepdef value should read *
+  value assert-equal
+
+feature setup
+  background
+    - visit "/"
+
+feature: create todo
+  background:
+    ! setup
+
+  scenario: success
+    - find "#new-todo"
+    - fill in "empty dishwasher"
+    - press return
+    - find last ".todo"
+    - text should read "empty dishwasher"
+    - find "#new-todo"
+    - value should read ""
+
+  scenario: failure - empty field
+    - find "#new-todo"
+    - press return
+    - find last ".todo"
+    - it should not exist
+    - find "#alert"
+    - text should read "You can't add an empty todo"
+
+feature: complete todo
+  background:
+    ! create todo -> success
+
+  scenario: success
+    - find last todo
+    - complete todo
+    - it should be completed
